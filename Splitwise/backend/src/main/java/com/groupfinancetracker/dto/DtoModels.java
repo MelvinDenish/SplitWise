@@ -142,13 +142,32 @@ public final class DtoModels {
         }
 
         public record GroupPairwise(Long groupId, List<PairwiseOwe> owes, List<PairwiseBalance> pairwiseBalances,
-                        List<PairwiseBalance> rawPairwiseBalances) {
+                        List<PairwiseBalance> rawPairwiseBalances, SettlementOptimization optimization) {
+        }
+
+        public record DebtCycle(List<Long> userIds, BigDecimal cancellableAmount) {
+        }
+
+        public record SettlementOptimization(String strategy, int rawTransactionCount, int optimizedTransactionCount,
+                        int eliminatedTransactionCount, List<DebtCycle> cycles) {
         }
 
         /** A pairwise/circular settlement, at any point in its mark-as-paid -> confirm lifecycle. */
         public record SettlementLedgerEntry(Long id, Long groupId, Long fromUserId, String fromUserName,
                         Long toUserId, String toUserName, BigDecimal amount, String status, Instant markedAt,
                         Instant confirmedAt, Instant createdAt, String transactionRef, String proofUrl, String note) {
+        }
+
+        public record NotificationResponse(Long id, Long recipientId, Long senderId, String senderName, Long groupId,
+                        String groupName, Long shareId, Long settlementId, String type, String title, String message,
+                        BigDecimal amount, Instant createdAt, Instant readAt) {
+        }
+
+        public record ShareReminderRequest(@NotNull Long shareId, String message) {
+        }
+
+        public record PairwiseReminderRequest(@NotNull Long groupId, @NotNull Long debtorId,
+                        @NotNull Long creditorId, @NotNull @Positive BigDecimal amount, String message) {
         }
 
         /** One itemized expense-share debt, for the settlement explainability breakdown. */

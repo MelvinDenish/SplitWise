@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import {
-  ArrowRight, ArrowLeft, CheckCircle2, Clock, TrendingDown, ChevronDown, ChevronUp, Receipt, History, GitMerge,
+  ArrowRight, ArrowLeft, Bell, CheckCircle2, Clock, TrendingDown, ChevronDown, ChevronUp, Receipt, History, GitMerge,
 } from 'lucide-react';
-import { groupAPI, subEventAPI } from '../lib/api';
+import { groupAPI, notificationAPI, subEventAPI } from '../lib/api';
 import { Group } from '../types';
 import { useToast } from '../components/Toast';
 import { useAuth } from '../contexts/AuthContext';
@@ -22,8 +22,10 @@ export const GroupSettlements = () => {
   const [group, setGroup] = useState<Group | null>(null);
   const [pairwise, setPairwise] = useState<any[]>([]);
   const [rawPairwise, setRawPairwise] = useState<any[]>([]);
+  const [optimization, setOptimization] = useState<any | null>(null);
   const [pending, setPending] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [remindingKey, setRemindingKey] = useState<string | null>(null);
 
   const [ledger, setLedger] = useState<{ shares: any[]; settlements: any[] } | null>(null);
   const [ledgerLoading, setLedgerLoading] = useState(false);
@@ -47,6 +49,7 @@ export const GroupSettlements = () => {
       setGroup(groupRes.data);
       setPairwise(pairwiseRes.data?.pairwiseBalances || []);
       setRawPairwise(pairwiseRes.data?.rawPairwiseBalances || []);
+      setOptimization(pairwiseRes.data?.optimization || null);
       setPending(pendingRes.data || []);
     } catch {
       showToast('Failed to load settlements', 'error');
@@ -113,6 +116,20 @@ export const GroupSettlements = () => {
       fetchAll();
     } catch (err: any) {
       showToast(err.response?.data?.message || 'Failed to confirm', 'error');
+    }
+  };
+
+  const remindPairwise = async (item: any) => {
+    if (!groupId) return;
+    const key = pairKey(item.user1Id, item.user2Id);
+    setRemindingKey(key);
+    try {
+      await notificationAPI.remindPairwise(groupId, item.user1Id, item.user2Id, Number(item.amount));
+      showToast(`Reminder sent to ${item.user1}`, 'success');
+    } catch (err: any) {
+      showToast(err.response?.data?.message || 'Failed to send reminder', 'error');
+    } finally {
+      setRemindingKey(null);
     }
   };
 
@@ -308,6 +325,26 @@ export const GroupSettlements = () => {
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
               The fewest payments needed to settle everyone up. Click a row to see exactly what it's made of.
             </p>
+            {optimization && (
+              <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+                <span className="px-2 py-1 rounded-full bg-white/70 dark:bg-gray-800/70 text-gray-700 dark:text-gray-200 border border-primary-100 dark:border-primary-900/40">
+                  {optimization.strategy === 'EXACT_MIN_TRANSACTIONS' ? 'Exact optimizer' : 'Greedy large-group optimizer'}
+                </span>
+                <span className="px-2 py-1 rounded-full bg-white/70 dark:bg-gray-800/70 text-gray-700 dark:text-gray-200 border border-primary-100 dark:border-primary-900/40">
+                  {optimization.rawTransactionCount} raw → {optimization.optimizedTransactionCount} optimized
+                </span>
+                {optimization.eliminatedTransactionCount > 0 && (
+                  <span className="px-2 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-900/40">
+                    {optimization.eliminatedTransactionCount} payment{optimization.eliminatedTransactionCount === 1 ? '' : 's'} eliminated
+                  </span>
+                )}
+                {optimization.cycles?.length > 0 && (
+                  <span className="px-2 py-1 rounded-full bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border border-amber-100 dark:border-amber-900/40">
+                    {optimization.cycles.length} circular debt cycle{optimization.cycles.length === 1 ? '' : 's'} found
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {pairwise.length === 0 ? (
@@ -319,6 +356,7 @@ export const GroupSettlements = () => {
             <div className="divide-y divide-gray-100 dark:divide-gray-700">
               {pairwise.map((item: any, idx: number) => {
                 const isDebtor = user && String(item.user1Id) === String(user.id);
+                const isCreditor = user && String(item.user2Id) === String(user.id);
                 const key = pairKey(item.user1Id, item.user2Id);
                 const isExpanded = expandedPair === key;
                 const alreadyPending = pendingByPair.get(pairKey(item.user1Id, item.user2Id));
@@ -351,6 +389,14 @@ export const GroupSettlements = () => {
                             className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary-600 hover:bg-primary-700 text-white"
                           >
                             Mark as Paid
+                          </button>
+                        ) : isCreditor ? (
+                          <button
+                            onClick={() => remindPairwise(item)}
+                            disabled={remindingKey === key}
+                            className="px-3 py-2 rounded-lg text-sm font-semibold bg-amber-100 hover:bg-amber-200 disabled:opacity-50 text-amber-800 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 dark:text-amber-200 flex items-center gap-1.5"
+                          >
+                            <Bell className="w-4 h-4" /> {remindingKey === key ? 'Sending…' : 'Remind'}
                           </button>
                         ) : (
                           <span className="text-xs text-gray-400 italic">not involved</span>

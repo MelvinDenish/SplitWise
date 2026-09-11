@@ -61,7 +61,9 @@ public class SettlementService {
             throw new NotFoundException("Group not found: " + groupId);
         List<Share> shares = shareRepository.findBySubEvent_Event_Group_Id(groupId);
         List<Settlement> settlements = settlementRepository.findByGroup_Id(groupId);
-        List<DtoModels.PairwiseBalance> pairwiseBalances = calculateSimplifiedPairwise(shares, settlements);
+        SettlementCalculator.OptimizationResult optimized = SettlementCalculator.optimize(
+                toDebtRows(shares), toSettlementRows(settlements));
+        List<DtoModels.PairwiseBalance> pairwiseBalances = toPairwiseBalances(optimized.edges(), "Optimized net balance");
         List<DtoModels.PairwiseBalance> rawPairwiseBalances = calculateRawPairwise(shares, settlements);
 
         List<DtoModels.PairwiseOwe> owes = new ArrayList<>();
@@ -69,7 +71,8 @@ public class SettlementService {
             owes.add(new DtoModels.PairwiseOwe(pb.user1Id(), pb.user2Id(), pb.amount(), pb.description()));
         }
 
-        return new DtoModels.GroupPairwise(groupId, owes, pairwiseBalances, rawPairwiseBalances);
+        return new DtoModels.GroupPairwise(groupId, owes, pairwiseBalances, rawPairwiseBalances,
+                toOptimizationDto(optimized));
     }
 
     public DtoModels.WeeklySettlementResponse weeklySettlements(@NonNull Long groupId, @NonNull Integer weekNumber,
@@ -120,16 +123,32 @@ public class SettlementService {
     private List<DtoModels.PairwiseBalance> calculateSimplifiedPairwise(
             List<Share> shares, List<Settlement> settlements) {
         Map<Long, BigDecimal> net = SettlementCalculator.netBalances(toDebtRows(shares), toSettlementRows(settlements));
-        List<SettlementCalculator.Edge> edges = SettlementCalculator.simplify(net);
+        List<SettlementCalculator.Edge> edges = SettlementCalculator.simplifyOptimal(net);
+        return toPairwiseBalances(edges, "Optimized net balance");
+    }
+
+    private List<DtoModels.PairwiseBalance> toPairwiseBalances(
+            List<SettlementCalculator.Edge> edges, String description) {
         List<DtoModels.PairwiseBalance> result = new ArrayList<>();
         for (SettlementCalculator.Edge e : edges) {
             String fromName = safeName(e.fromId());
             String toName = safeName(e.toId());
             result.add(new DtoModels.PairwiseBalance(
                     e.fromId(), fromName, e.toId(), toName, e.amount(), fromName,
-                    "Simplified net balance"));
+                    description));
         }
         return result;
+    }
+
+    private DtoModels.SettlementOptimization toOptimizationDto(SettlementCalculator.OptimizationResult result) {
+        return new DtoModels.SettlementOptimization(
+                result.strategy(),
+                result.rawTransactionCount(),
+                result.optimizedTransactionCount(),
+                result.eliminatedTransactionCount(),
+                result.cycles().stream()
+                        .map(c -> new DtoModels.DebtCycle(c.userIds(), c.cancellableAmount()))
+                        .toList());
     }
 
     /**

@@ -10,6 +10,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -54,6 +55,13 @@ public class EmailService {
     @Async
     public void sendPasswordChangedNotification(String name, String toEmail) {
         send(toEmail, "Your SplitWise Password Has Been Changed", buildPasswordChangedHtml(name));
+    }
+
+    @Async
+    public void sendPaymentReminder(String name, String toEmail, String senderName, String groupName,
+            BigDecimal amount, String message) {
+        send(toEmail, "SplitWise payment reminder from " + senderName,
+                buildPaymentReminderHtml(name, senderName, groupName, amount, message));
     }
 
     // ─── Brevo HTTPS API call ──────────────────────────────────────────────────
@@ -185,5 +193,48 @@ public class EmailService {
             </body>
             </html>
             """.formatted(name, frontendUrl);
+    }
+
+    private String buildPaymentReminderHtml(String name, String senderName, String groupName,
+            BigDecimal amount, String message) {
+        return """
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="UTF-8"></head>
+            <body style="margin:0;padding:0;background:#f6f8fa;font-family:'Segoe UI',Arial,sans-serif;">
+              <table width="100%%" cellpadding="0" cellspacing="0" style="background:#f6f8fa;padding:40px 0;">
+                <tr><td align="center">
+                  <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+                    <tr>
+                      <td style="background:linear-gradient(135deg,#6366f1 0%%,#14b8a6 100%%);padding:36px 48px;text-align:center;">
+                        <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:700;">Payment Reminder</h1>
+                        <p style="margin:8px 0 0;color:rgba(255,255,255,0.88);font-size:15px;">%s sent you a SplitWise reminder</p>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:36px 48px;">
+                        <p style="color:#374151;font-size:16px;margin:0 0 18px;">Hi <strong>%s</strong>,</p>
+                        <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 22px;">
+                          You have an outstanding payment of <strong>₹%s</strong> in <strong>%s</strong>.
+                        </p>
+                        <div style="background:#f0fdfa;border-left:4px solid #14b8a6;border-radius:0 8px 8px 0;padding:16px 20px;margin:0 0 28px;">
+                          <p style="margin:0;color:#115e59;font-size:14px;line-height:1.5;">%s</p>
+                        </div>
+                        <div style="text-align:center;">
+                          <a href="%s/login" style="display:inline-block;background:linear-gradient(135deg,#6366f1,#14b8a6);color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:600;font-size:15px;">Open SplitWise</a>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="background:#f9fafb;padding:24px 48px;text-align:center;border-top:1px solid #e5e7eb;">
+                        <p style="margin:0;color:#9ca3af;font-size:12px;">© 2025 SplitWise. This is an automated reminder.</p>
+                      </td>
+                    </tr>
+                  </table>
+                </td></tr>
+              </table>
+            </body>
+            </html>
+            """.formatted(senderName, name, amount, groupName, message, frontendUrl);
     }
 }

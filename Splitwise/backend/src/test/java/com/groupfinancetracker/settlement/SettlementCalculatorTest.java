@@ -66,4 +66,51 @@ class SettlementCalculatorTest {
         assertThat(edges).hasSize(1);
         assertThat(edges.get(0).amount()).isEqualByComparingTo("60");
     }
+
+    @Test
+    void exactOptimizerCanBeatGreedyTransactionCount() {
+        var net = java.util.Map.of(
+                1L, money("-5"),
+                2L, money("-4"),
+                3L, money("4"),
+                4L, money("3"),
+                5L, money("2"));
+
+        assertThat(SettlementCalculator.simplify(net)).hasSize(4);
+
+        List<Edge> edges = SettlementCalculator.simplifyOptimal(net);
+        assertThat(edges).hasSize(3);
+        assertThat(edges).anySatisfy(e -> {
+            assertThat(e.fromId()).isEqualTo(1L);
+            assertThat(e.toId()).isEqualTo(4L);
+            assertThat(e.amount()).isEqualByComparingTo("3");
+        });
+        assertThat(edges).anySatisfy(e -> {
+            assertThat(e.fromId()).isEqualTo(1L);
+            assertThat(e.toId()).isEqualTo(5L);
+            assertThat(e.amount()).isEqualByComparingTo("2");
+        });
+        assertThat(edges).anySatisfy(e -> {
+            assertThat(e.fromId()).isEqualTo(2L);
+            assertThat(e.toId()).isEqualTo(3L);
+            assertThat(e.amount()).isEqualByComparingTo("4");
+        });
+    }
+
+    @Test
+    void optimizationReportsCircularDebtCyclesAndSavings() {
+        var debts = List.of(
+                new DebtRow(1L, 2L, money("100")),
+                new DebtRow(2L, 3L, money("100")),
+                new DebtRow(3L, 1L, money("40")));
+
+        var result = SettlementCalculator.optimize(debts, List.of());
+
+        assertThat(result.strategy()).isEqualTo("EXACT_MIN_TRANSACTIONS");
+        assertThat(result.rawTransactionCount()).isEqualTo(3);
+        assertThat(result.optimizedTransactionCount()).isEqualTo(1);
+        assertThat(result.eliminatedTransactionCount()).isEqualTo(2);
+        assertThat(result.cycles()).hasSize(1);
+        assertThat(result.cycles().get(0).cancellableAmount()).isEqualByComparingTo("40");
+    }
 }
