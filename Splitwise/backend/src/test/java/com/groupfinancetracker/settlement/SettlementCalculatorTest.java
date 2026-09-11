@@ -66,4 +66,92 @@ class SettlementCalculatorTest {
         assertThat(edges).hasSize(1);
         assertThat(edges.get(0).amount()).isEqualByComparingTo("60");
     }
+
+    @Test
+    void exactOptimizerCanBeatGreedyTransactionCount() {
+        var net = java.util.Map.of(
+                1L, money("-5"),
+                2L, money("-4"),
+                3L, money("4"),
+                4L, money("3"),
+                5L, money("2"));
+
+        assertThat(SettlementCalculator.simplify(net)).hasSize(4);
+
+        List<Edge> edges = SettlementCalculator.simplifyOptimal(net);
+        assertThat(edges).hasSize(3);
+        assertThat(edges).anySatisfy(e -> {
+            assertThat(e.fromId()).isEqualTo(1L);
+            assertThat(e.toId()).isEqualTo(4L);
+            assertThat(e.amount()).isEqualByComparingTo("3");
+        });
+        assertThat(edges).anySatisfy(e -> {
+            assertThat(e.fromId()).isEqualTo(1L);
+            assertThat(e.toId()).isEqualTo(5L);
+            assertThat(e.amount()).isEqualByComparingTo("2");
+        });
+        assertThat(edges).anySatisfy(e -> {
+            assertThat(e.fromId()).isEqualTo(2L);
+            assertThat(e.toId()).isEqualTo(3L);
+            assertThat(e.amount()).isEqualByComparingTo("4");
+        });
+    }
+
+    @Test
+    void optimizationReportsCircularDebtCyclesAndSavings() {
+        var debts = List.of(
+                new DebtRow(1L, 2L, money("100")),
+                new DebtRow(2L, 3L, money("100")),
+                new DebtRow(3L, 1L, money("40")));
+
+        var result = SettlementCalculator.optimize(debts, List.of());
+
+        assertThat(result.strategy()).isEqualTo("EXACT_MIN_TRANSACTIONS");
+        assertThat(result.rawTransactionCount()).isEqualTo(3);
+        assertThat(result.optimizedTransactionCount()).isEqualTo(1);
+        assertThat(result.eliminatedTransactionCount()).isEqualTo(2);
+        assertThat(result.cycles()).hasSize(1);
+        assertThat(result.cycles().get(0).cancellableAmount()).isEqualByComparingTo("40");
+    }
+
+    @Test
+    void epsilonRoundingDoesNotCreateTinySettlementEdges() {
+        var net = SettlementCalculator.netBalances(
+                List.of(new DebtRow(1L, 2L, money("10.004"))),
+                List.of(new SettlementRow(1L, 2L, money("10.000"))));
+
+        assertThat(SettlementCalculator.simplifyOptimal(net)).isEmpty();
+    }
+
+    @Test
+    void detectsMultipleCircularDebtCycles() {
+        var raw = List.of(
+                new Edge(1L, 2L, money("80")),
+                new Edge(2L, 3L, money("50")),
+                new Edge(3L, 1L, money("30")),
+                new Edge(3L, 4L, money("20")),
+                new Edge(4L, 2L, money("10")));
+
+        var cycles = SettlementCalculator.detectCycles(raw);
+
+        assertThat(cycles).hasSize(2);
+        assertThat(cycles).anySatisfy(c -> assertThat(c.cancellableAmount()).isEqualByComparingTo("30"));
+        assertThat(cycles).anySatisfy(c -> assertThat(c.cancellableAmount()).isEqualByComparingTo("10"));
+    }
+
+    @Test
+    void groupLevelSettlementOffsetsEventLevelDebt() {
+        var eventDebts = List.of(
+                new DebtRow(1L, 2L, money("70")),
+                new DebtRow(3L, 1L, money("25")));
+        var groupLevelSettlements = List.of(new SettlementRow(1L, 2L, money("70")));
+
+        var edges = SettlementCalculator.simplifyOptimal(
+                SettlementCalculator.netBalances(eventDebts, groupLevelSettlements));
+
+        assertThat(edges).hasSize(1);
+        assertThat(edges.get(0).fromId()).isEqualTo(3L);
+        assertThat(edges.get(0).toId()).isEqualTo(1L);
+        assertThat(edges.get(0).amount()).isEqualByComparingTo("25");
+    }
 }

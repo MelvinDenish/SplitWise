@@ -13,22 +13,22 @@ public class SettlementController {
     private final SettlementService settlementService;
 
     @GetMapping("/group/{groupId}")
-    public GroupSettlementSummary group(@PathVariable Long groupId) { return settlementService.groupSummary(groupId); }
+    public GroupSettlementSummary group(@PathVariable Long groupId) { return settlementService.groupSummary(groupId, actorId()); }
 
     @GetMapping("/user/{userId}")
     public UserOutstandingDebts user(@PathVariable Long userId) { return settlementService.userDebts(userId); }
 
     @GetMapping("/group/{groupId}/pairwise")
-    public GroupPairwise pairwise(@PathVariable Long groupId) { return settlementService.groupPairwise(groupId); }
+    public GroupPairwise pairwise(@PathVariable Long groupId) { return settlementService.groupPairwise(groupId, actorId()); }
 
     @GetMapping("/group/{groupId}/pending")
     public java.util.List<com.groupfinancetracker.dto.DtoModels.SettlementLedgerEntry> pending(@PathVariable Long groupId) {
-        return settlementService.pendingSettlements(groupId);
+        return settlementService.pendingSettlements(groupId, actorId());
     }
 
     @GetMapping("/group/{groupId}/ledger")
     public com.groupfinancetracker.dto.DtoModels.GroupLedgerResponse ledger(@PathVariable Long groupId) {
-        return settlementService.groupLedger(groupId);
+        return settlementService.groupLedger(groupId, actorId());
     }
 
     @GetMapping("/group/{groupId}/by-week")
@@ -60,9 +60,13 @@ public class SettlementController {
 
     @GetMapping("/group/{groupId}/my-spend")
     public com.groupfinancetracker.dto.DtoModels.SpendResponse mySpendGroup(@PathVariable Long groupId) {
-        Object details = SecurityContextHolder.getContext().getAuthentication() != null ? SecurityContextHolder.getContext().getAuthentication().getDetails() : null;
-        Long actorId = details instanceof Long ? (Long) details : null;
+        Long actorId = actorId();
         if (actorId == null) throw new RuntimeException("Unauthorized");
         return settlementService.mySpendForGroup(groupId, actorId);
+    }
+
+    private Long actorId() {
+        Object details = SecurityContextHolder.getContext().getAuthentication() != null ? SecurityContextHolder.getContext().getAuthentication().getDetails() : null;
+        return details instanceof Long ? (Long) details : null;
     }
 }

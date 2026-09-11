@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { Modal } from './Modal';
-import { subEventAPI, eventAPI, groupAPI } from '../lib/api';
+import { subEventAPI, eventAPI, groupAPI, receiptScannerAPI } from '../lib/api';
 import { User } from '../types';
 import { useToast } from './Toast';
 
@@ -32,6 +32,11 @@ export const CreateSubEventModal = ({
   const [recurringPeriod, setRecurringPeriod] = useState<string>('DAILY');
   const [payerId, setPayerId] = useState<string | number>('');
   const [subEventDate, setSubEventDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [receiptText, setReceiptText] = useState('');
+  const [receiptPreview, setReceiptPreview] = useState('');
+  const [receiptScan, setReceiptScan] = useState<any | null>(null);
+  const [receiptAssignments, setReceiptAssignments] = useState<Record<number, string | number>>({});
+  const [isScanningReceipt, setIsScanningReceipt] = useState(false);
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -90,6 +95,10 @@ export const CreateSubEventModal = ({
       setSplitType('EQUAL');
       setIsRecurring(false);
       setRecurringPeriod('DAILY');
+      setReceiptText('');
+      setReceiptPreview('');
+      setReceiptScan(null);
+      setReceiptAssignments({});
     }
   }, [isOpen, editSubEvent]);
 
@@ -168,6 +177,62 @@ export const CreateSubEventModal = ({
     }
   };
 
+  const handleReceiptUpload = (file?: File) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setReceiptPreview(String(reader.result || ''));
+    reader.readAsDataURL(file);
+  };
+
+  const scanReceipt = async () => {
+    if (!receiptText.trim()) {
+      showToast('Paste receipt text before scanning', 'error');
+      return;
+    }
+    setIsScanningReceipt(true);
+    try {
+      const res = await receiptScannerAPI.scan(receiptText, parseFloat(totalAmount) || undefined);
+      setReceiptScan(res.data);
+      if (res.data?.detectedTotal) setTotalAmount(String(res.data.detectedTotal));
+      if (!title && res.data?.items?.[0]?.label) setTitle(res.data.items[0].label);
+      showToast(res.data?.warning || 'Receipt parsed successfully', 'success');
+    } catch (error: any) {
+      showToast(error.response?.data?.message || 'Failed to parse receipt', 'error');
+    } finally {
+      setIsScanningReceipt(false);
+    }
+  };
+
+  const applyReceiptAssignments = () => {
+    if (!receiptScan?.items?.length) return;
+    const memberTotals: Record<string | number, number> = {};
+    receiptScan.items.forEach((item: any, index: number) => {
+      if (item.taxLike) return;
+      const assignee = receiptAssignments[index];
+      if (!assignee) return;
+      memberTotals[assignee] = (memberTotals[assignee] || 0) + Number(item.amount || 0);
+    });
+    const selected = Object.keys(memberTotals);
+    if (selected.length === 0) {
+      showToast('Assign at least one receipt item to a member', 'error');
+      return;
+    }
+
+    const subtotal = selected.reduce((sum, id) => sum + memberTotals[id], 0);
+    const overhead = Number(receiptScan.tax || 0) + Number(receiptScan.tip || 0);
+    const adjusted = Object.fromEntries(selected.map((id) => {
+      const base = memberTotals[id];
+      const extra = subtotal > 0 ? overhead * (base / subtotal) : overhead / selected.length;
+      return [id, (base + extra).toFixed(2)];
+    }));
+
+    setSelectedSharers(selected);
+    setCustomAmounts(adjusted);
+    setSplitType('CUSTOM');
+    setTotalAmount(String(receiptScan.detectedTotal || Object.values(adjusted).reduce((sum: number, v: any) => sum + Number(v), 0)));
+    showToast('Receipt items applied as custom split', 'success');
+  };
+
   const equalShare = selectedSharers.length > 0
     ? (parseFloat(totalAmount) || 0) / selectedSharers.length
     : 0;
@@ -188,6 +253,77 @@ export const CreateSubEventModal = ({
             required
           />
         </div>
+
+        {!isEdit && (
+          <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-950/20 space-y-3">
+            <div>
+              <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">AI Receipt Scanner</p>
+              <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
+                Upload a photo for reference, paste receipt OCR/text, then assign parsed items to members.
+              </p>
+            </div>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => handleReceiptUpload(e.target.files?.[0])}
+              className="block w-full text-xs text-blue-900 dark:text-blue-200"
+            />
+            {receiptPreview && (
+              <img src={receiptPreview} alt="Receipt preview" className="max-h-40 rounded-lg border border-blue-100 dark:border-blue-900/40" />
+            )}
+            <textarea
+              value={receiptText}
+              onChange={(e) => setReceiptText(e.target.value)}
+              rows={4}
+              placeholder={'Paste receipt text, for example:\nPaneer Roll 180\nCoffee 90\nGST 13.50\nTotal 283.50'}
+              className="w-full px-3 py-2 border rounded-lg text-xs bg-white dark:bg-gray-700 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              type="button"
+              onClick={scanReceipt}
+              disabled={isScanningReceipt}
+              className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold"
+            >
+              {isScanningReceipt ? 'Scanning…' : 'Extract Items'}
+            </button>
+
+            {receiptScan?.items?.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs text-blue-900 dark:text-blue-200">
+                  <span>Total detected: ₹{Number(receiptScan.detectedTotal).toFixed(2)}</span>
+                  <span>Tax/tip: ₹{(Number(receiptScan.tax || 0) + Number(receiptScan.tip || 0)).toFixed(2)}</span>
+                </div>
+                {receiptScan.items.map((item: any, index: number) => (
+                  <div key={index} className="flex items-center gap-2 text-xs bg-white dark:bg-gray-800 rounded-lg p-2 border border-blue-100 dark:border-blue-900/40">
+                    <div className="flex-1">
+                      <p className="font-semibold text-gray-900 dark:text-white">{item.label}</p>
+                      <p className="text-gray-500 dark:text-gray-400">₹{Number(item.amount).toFixed(2)}{item.taxLike ? ' · tax/tip' : ''}</p>
+                    </div>
+                    {!item.taxLike && (
+                      <select
+                        value={String(receiptAssignments[index] || '')}
+                        onChange={(e) => setReceiptAssignments({ ...receiptAssignments, [index]: e.target.value })}
+                        className="px-2 py-1 border rounded bg-white dark:bg-gray-700 dark:border-gray-600 text-gray-900 dark:text-white"
+                      >
+                        <option value="">Assign</option>
+                        {groupMembers.map((member) => (
+                          <option key={member.id} value={String(member.id)}>{member.name}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={applyReceiptAssignments}
+                  className="w-full px-3 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-xs font-semibold"
+                >
+                  Apply Itemized Split
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">

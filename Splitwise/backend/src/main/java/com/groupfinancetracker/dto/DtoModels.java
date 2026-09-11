@@ -142,13 +142,32 @@ public final class DtoModels {
         }
 
         public record GroupPairwise(Long groupId, List<PairwiseOwe> owes, List<PairwiseBalance> pairwiseBalances,
-                        List<PairwiseBalance> rawPairwiseBalances) {
+                        List<PairwiseBalance> rawPairwiseBalances, SettlementOptimization optimization) {
+        }
+
+        public record DebtCycle(List<Long> userIds, BigDecimal cancellableAmount) {
+        }
+
+        public record SettlementOptimization(String strategy, int rawTransactionCount, int optimizedTransactionCount,
+                        int eliminatedTransactionCount, List<DebtCycle> cycles) {
         }
 
         /** A pairwise/circular settlement, at any point in its mark-as-paid -> confirm lifecycle. */
         public record SettlementLedgerEntry(Long id, Long groupId, Long fromUserId, String fromUserName,
                         Long toUserId, String toUserName, BigDecimal amount, String status, Instant markedAt,
                         Instant confirmedAt, Instant createdAt, String transactionRef, String proofUrl, String note) {
+        }
+
+        public record NotificationResponse(Long id, Long recipientId, Long senderId, String senderName, Long groupId,
+                        String groupName, Long shareId, Long settlementId, String type, String title, String message,
+                        BigDecimal amount, Instant createdAt, Instant readAt) {
+        }
+
+        public record ShareReminderRequest(@NotNull Long shareId, String message) {
+        }
+
+        public record PairwiseReminderRequest(@NotNull Long groupId, @NotNull Long debtorId,
+                        @NotNull Long creditorId, @NotNull @Positive BigDecimal amount, String message) {
         }
 
         /** One itemized expense-share debt, for the settlement explainability breakdown. */
@@ -179,6 +198,48 @@ public final class DtoModels {
 
         public record PairwiseBalance(Long user1Id, String user1, Long user2Id, String user2, BigDecimal amount,
                         String owedBy, String description) {
+        }
+
+        public record ReceiptScanRequest(String receiptText, BigDecimal expectedTotal) {
+        }
+
+        public record ReceiptLineItem(String label, BigDecimal amount, boolean taxLike, boolean suspicious) {
+        }
+
+        public record ReceiptScanResponse(List<ReceiptLineItem> items, BigDecimal subtotal, BigDecimal tax,
+                        BigDecimal tip, BigDecimal detectedTotal, boolean duplicateSuspected,
+                        boolean suspiciousTotal, String warning) {
+        }
+
+        public record PaymentProofAnalysisRequest(String proofText, String proofUrl) {
+        }
+
+        public record PaymentProofAnalysisResponse(String transactionRef, BigDecimal amount, LocalDate transactionDate,
+                        boolean suspicious, String warning) {
+        }
+
+        public record DisputePaymentRequest(@NotNull Long shareId, @NotBlank String reason) {
+        }
+
+        public record PaymentDisputeResponse(Long id, Long shareId, Long raisedById, String raisedByName,
+                        Long againstUserId, String againstUserName, String reason, String status, Instant createdAt,
+                        Instant resolvedAt) {
+        }
+
+        public record GroupAnalyticsResponse(Long groupId, BigDecimal totalSpend, BigDecimal monthlyAverage,
+                        BigDecimal forecastNextMonth, List<CategorySpend> categorySpends,
+                        List<ExpenseInsight> insights, List<TrustScore> trustScores) {
+        }
+
+        public record CategorySpend(String category, BigDecimal amount, int expenseCount) {
+        }
+
+        public record ExpenseInsight(String type, String title, String message, BigDecimal amount) {
+        }
+
+        public record TrustScore(Long userId, String userName, int confirmedDebts, int pendingDebts,
+                        int pendingConfirmations, double onTimeRate, double averageSettlementDelayDays,
+                        String badge) {
         }
 
         public record WeeklySettlementResponse(Integer weekNumber, Integer year, Long currentUser,

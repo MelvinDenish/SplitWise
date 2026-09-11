@@ -73,3 +73,20 @@ export interface AuthContextType {
   logout: () => Promise<void>;
   isLoading: boolean;
 }
+
+export interface NotificationItem {
+  id: number | string;
+  recipientId: number | string;
+  senderId: number | string;
+  senderName: string;
+  groupId?: number | string;
+  groupName?: string;
+  shareId?: number | string;
+  settlementId?: number | string;
+  type: string;
+  title: string;
+  message: string;
+  amount?: number;
+  createdAt: string;
+  readAt?: string;
+}
