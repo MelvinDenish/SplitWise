@@ -49,6 +49,11 @@ public class SettlementService {
         return new DtoModels.GroupSettlementSummary(g.getId(), list, outstanding);
     }
 
+    public DtoModels.GroupSettlementSummary groupSummary(@NonNull Long groupId, Long actorId) {
+        requireGroupMember(groupId, actorId);
+        return groupSummary(groupId);
+    }
+
     // Itemized view only; net balances live in groupSummary (shares - settlements).
     public DtoModels.UserOutstandingDebts userDebts(@NonNull Long userId) {
         var shares = shareRepository.findByUser_IdAndPaymentStatus_StatusNot(userId, PaymentState.CONFIRMED);
@@ -73,6 +78,11 @@ public class SettlementService {
 
         return new DtoModels.GroupPairwise(groupId, owes, pairwiseBalances, rawPairwiseBalances,
                 toOptimizationDto(optimized));
+    }
+
+    public DtoModels.GroupPairwise groupPairwise(@NonNull Long groupId, Long actorId) {
+        requireGroupMember(groupId, actorId);
+        return groupPairwise(groupId);
     }
 
     public DtoModels.WeeklySettlementResponse weeklySettlements(@NonNull Long groupId, @NonNull Integer weekNumber,
@@ -218,6 +228,11 @@ public class SettlementService {
                 .toList();
     }
 
+    public List<DtoModels.SettlementLedgerEntry> pendingSettlements(@NonNull Long groupId, Long actorId) {
+        requireGroupMember(groupId, actorId);
+        return pendingSettlements(groupId);
+    }
+
     /**
      * Full itemized breakdown for a group -- every debt-share and every settlement (any status),
      * with dates, so the UI can explain exactly what a simplified/circular settlement is made of.
@@ -243,6 +258,21 @@ public class SettlementService {
                 .toList();
 
         return new DtoModels.GroupLedgerResponse(groupId, shareEntries, settlementEntries);
+    }
+
+    public DtoModels.GroupLedgerResponse groupLedger(@NonNull Long groupId, Long actorId) {
+        requireGroupMember(groupId, actorId);
+        return groupLedger(groupId);
+    }
+
+    private void requireGroupMember(Long groupId, Long actorId) {
+        Group group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new NotFoundException("Group not found: " + groupId));
+        boolean isMember = actorId != null && (group.getCreator().getId().equals(actorId)
+                || group.getMembers().stream().anyMatch(user -> user.getId().equals(actorId)));
+        if (!isMember) {
+            throw new com.groupfinancetracker.exception.ForbiddenActionException("Only group members can view settlements");
+        }
     }
 
     private DtoModels.SettlementLedgerEntry toLedgerEntry(Settlement s) {

@@ -411,6 +411,22 @@ export const notificationAPI = {
   ) => api.post('/notifications/reminders/pairwise', { groupId, debtorId, creditorId, amount, message }),
 };
 
+export const receiptScannerAPI = {
+  scan: (receiptText: string, expectedTotal?: number) =>
+    api.post('/receipt-scanner/scan', { receiptText, expectedTotal }),
+  analyzeProof: (proofText?: string, proofUrl?: string) =>
+    api.post('/receipt-scanner/proof', { proofText, proofUrl }),
+};
+
+export const analyticsAPI = {
+  group: (groupId: string | number) => api.get(`/analytics/groups/${groupId}`),
+};
+
+export const paymentDisputeAPI = {
+  dispute: (shareId: string | number, reason: string) => api.post('/payments/dispute', { shareId, reason }),
+  listByGroup: (groupId: string | number) => api.get(`/payments/groups/${groupId}/disputes`),
+};
+
 export const eventAPI = {
   getByGroup: (groupId: string) => {
     if (isMockMode()) {

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { Calendar, Plus, DollarSign, Users, CheckCircle, QrCode, ExternalLink, ArrowRight, TrendingDown } from 'lucide-react';
-import { eventAPI, subEventAPI, groupAPI } from '../lib/api';
+import { eventAPI, subEventAPI, groupAPI, paymentDisputeAPI, receiptScannerAPI } from '../lib/api';
 import { Event, SubEvent } from '../types';
 import { useToast } from '../components/Toast';
 import { CreateSubEventModal } from '../components/CreateSubEventModal';
@@ -55,6 +55,8 @@ export const EventDetail = () => {
   const [activeSubEventId, setActiveSubEventId] = useState<string | number | null>(null);
   const [txnRef, setTxnRef] = useState('');
   const [proofUrl, setProofUrl] = useState('');
+  const [proofText, setProofText] = useState('');
+  const [isAnalyzingProof, setIsAnalyzingProof] = useState(false);
 
   const { user } = useAuth();
   const { showToast, ToastContainer } = useToast();
@@ -146,7 +148,21 @@ export const EventDetail = () => {
     setActiveSubEventId(subEventId);
     setTxnRef('');
     setProofUrl('');
+    setProofText('');
     setShowProofModal(true);
+  };
+
+  const analyzeProof = async () => {
+    setIsAnalyzingProof(true);
+    try {
+      const res = await receiptScannerAPI.analyzeProof(proofText, proofUrl);
+      if (res.data?.transactionRef) setTxnRef(res.data.transactionRef);
+      showToast(res.data?.warning || 'Proof details analyzed', res.data?.suspicious ? 'error' : 'success');
+    } catch (error: any) {
+      showToast(error.response?.data?.message || 'Failed to analyze proof', 'error');
+    } finally {
+      setIsAnalyzingProof(false);
+    }
   };
 
   const submitPaymentProof = async () => {
@@ -168,6 +184,18 @@ export const EventDetail = () => {
       fetchEventData();
     } catch (error: any) {
       showToast(error.response?.data?.message || 'Failed to confirm payment', 'error');
+    }
+  };
+
+  const handleDisputePayment = async (shareId: string | number) => {
+    const reason = window.prompt('Why are you disputing this payment proof?');
+    if (!reason?.trim()) return;
+    try {
+      await paymentDisputeAPI.dispute(shareId, reason.trim());
+      showToast('Dispute recorded in the payment audit trail', 'success');
+      fetchEventData();
+    } catch (error: any) {
+      showToast(error.response?.data?.message || 'Failed to record dispute', 'error');
     }
   };
 
@@ -389,13 +417,21 @@ export const EventDetail = () => {
 
                               {/* Payer can confirm a MARKED_AS_PAID share */}
                               {isPayer && canConfirm(rawStatus) && !isSharerPayer && (
-                                <button
-                                  onClick={() => handleConfirmPayment(sharer.id, subEvent.id)}
-                                  className="px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-medium transition flex items-center gap-1"
-                                >
-                                  <CheckCircle className="w-3.5 h-3.5" />
-                                  Confirm Receipt
-                                </button>
+                                <>
+                                  <button
+                                    onClick={() => handleConfirmPayment(sharer.id, subEvent.id)}
+                                    className="px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-medium transition flex items-center gap-1"
+                                  >
+                                    <CheckCircle className="w-3.5 h-3.5" />
+                                    Confirm Receipt
+                                  </button>
+                                  <button
+                                    onClick={() => handleDisputePayment(sharer.id)}
+                                    className="px-2.5 py-1 bg-red-100 hover:bg-red-200 dark:bg-red-900/40 dark:hover:bg-red-900/60 text-red-700 dark:text-red-200 rounded text-xs font-medium transition"
+                                  >
+                                    Dispute
+                                  </button>
+                                </>
                               )}
                             </div>
                           </div>
@@ -629,6 +665,25 @@ export const EventDetail = () => {
                   onChange={(e) => setProofUrl(e.target.value)}
                   className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 dark:bg-gray-700 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Proof Text / Screenshot OCR (Optional)</label>
+                <textarea
+                  placeholder="Paste SMS/bank/UPI proof text here to auto-detect UPI ref / UTR"
+                  value={proofText}
+                  onChange={(e) => setProofText(e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 dark:bg-gray-700 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                <button
+                  type="button"
+                  onClick={analyzeProof}
+                  disabled={isAnalyzingProof || (!proofText.trim() && !proofUrl.trim())}
+                  className="mt-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-xs font-semibold rounded transition"
+                >
+                  {isAnalyzingProof ? 'Analyzing…' : 'Auto-read Ref'}
+                </button>
               </div>
             </div>
 

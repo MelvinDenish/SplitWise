@@ -11,6 +11,8 @@ import java.util.List;
 public interface SubEventRepository extends JpaRepository<SubEvent, Long> {
     List<SubEvent> findByEvent_Id(Long eventId);
 
+    List<SubEvent> findByEvent_Group_Id(Long groupId);
+
     List<SubEvent> findByIsRecurringTrueAndNextRunDateBefore(java.time.Instant now);
 
     @Query("""

@@ -200,6 +200,48 @@ public final class DtoModels {
                         String owedBy, String description) {
         }
 
+        public record ReceiptScanRequest(String receiptText, BigDecimal expectedTotal) {
+        }
+
+        public record ReceiptLineItem(String label, BigDecimal amount, boolean taxLike, boolean suspicious) {
+        }
+
+        public record ReceiptScanResponse(List<ReceiptLineItem> items, BigDecimal subtotal, BigDecimal tax,
+                        BigDecimal tip, BigDecimal detectedTotal, boolean duplicateSuspected,
+                        boolean suspiciousTotal, String warning) {
+        }
+
+        public record PaymentProofAnalysisRequest(String proofText, String proofUrl) {
+        }
+
+        public record PaymentProofAnalysisResponse(String transactionRef, BigDecimal amount, LocalDate transactionDate,
+                        boolean suspicious, String warning) {
+        }
+
+        public record DisputePaymentRequest(@NotNull Long shareId, @NotBlank String reason) {
+        }
+
+        public record PaymentDisputeResponse(Long id, Long shareId, Long raisedById, String raisedByName,
+                        Long againstUserId, String againstUserName, String reason, String status, Instant createdAt,
+                        Instant resolvedAt) {
+        }
+
+        public record GroupAnalyticsResponse(Long groupId, BigDecimal totalSpend, BigDecimal monthlyAverage,
+                        BigDecimal forecastNextMonth, List<CategorySpend> categorySpends,
+                        List<ExpenseInsight> insights, List<TrustScore> trustScores) {
+        }
+
+        public record CategorySpend(String category, BigDecimal amount, int expenseCount) {
+        }
+
+        public record ExpenseInsight(String type, String title, String message, BigDecimal amount) {
+        }
+
+        public record TrustScore(Long userId, String userName, int confirmedDebts, int pendingDebts,
+                        int pendingConfirmations, double onTimeRate, double averageSettlementDelayDays,
+                        String badge) {
+        }
+
         public record WeeklySettlementResponse(Integer weekNumber, Integer year, Long currentUser,
                         List<ToPayEntry> toPay,
                         List<ToReceiveEntry> toReceive, List<PairwiseBalance> pairwiseBalances,

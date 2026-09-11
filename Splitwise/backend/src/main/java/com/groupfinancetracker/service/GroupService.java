@@ -51,6 +51,14 @@ public class GroupService {
         return toDto(g);
     }
 
+    public DtoModels.GroupResponse get(Long id, Long actorId) {
+        Group g = groupRepository.findById(id).orElseThrow(() -> new NotFoundException("Group not found: " + id));
+        if (!isMember(g, actorId)) {
+            throw new com.groupfinancetracker.exception.ForbiddenActionException("Only group members can view this group");
+        }
+        return toDto(g);
+    }
+
     public List<DtoModels.GroupResponse> listForUser(Long userId) {
         return groupRepository.findAllByMembers_Id(userId)
                 .stream()
@@ -64,6 +72,11 @@ public class GroupService {
         User u = userRepository.findById(userId).orElseThrow(() -> new NotFoundException("User not found: " + userId));
         g.getMembers().add(u);
         groupRepository.save(g);
+    }
+
+    private boolean isMember(Group group, Long userId) {
+        return userId != null && (group.getCreator().getId().equals(userId)
+                || group.getMembers().stream().anyMatch(u -> u.getId().equals(userId)));
     }
 
     public void removeMember(Long groupId, Long userId, Long actorUserId) {

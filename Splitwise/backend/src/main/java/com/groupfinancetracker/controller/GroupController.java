@@ -28,11 +28,15 @@ public class GroupController {
 
     @GetMapping("/{id}")
     public GroupResponse get(@PathVariable Long id) {
-        return groupService.get(id);
+        return groupService.get(id, actorId());
     }
 
     @GetMapping
     public List<GroupResponse> listForUser(@RequestParam("userId") Long userId) {
+        Long actorId = actorId();
+        if (actorId == null || !actorId.equals(userId)) {
+            throw new com.groupfinancetracker.exception.ForbiddenActionException("You can only list your own groups");
+        }
         return groupService.listForUser(userId);
     }
 
@@ -194,10 +198,13 @@ public class GroupController {
 
     @DeleteMapping("/{groupId}")
     public void delete(@PathVariable Long groupId) {
+        groupService.delete(groupId, actorId());
+    }
+
+    private Long actorId() {
         Object details = SecurityContextHolder.getContext().getAuthentication() != null
                 ? SecurityContextHolder.getContext().getAuthentication().getDetails()
                 : null;
-        Long actorId = details instanceof Long ? (Long) details : null;
-        groupService.delete(groupId, actorId);
+        return details instanceof Long ? (Long) details : null;
     }
 }

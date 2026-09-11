@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
-import { Users, Calendar, Plus, ChevronLeft, ChevronRight, QrCode, Search, Download, LogOut, TrendingDown, ArrowRight, CheckCircle2 } from 'lucide-react';
-import { groupAPI, eventAPI } from '../lib/api';
+import { Users, Calendar, Plus, ChevronLeft, ChevronRight, QrCode, Search, Download, LogOut, TrendingDown, ArrowRight, CheckCircle2, BarChart3, ShieldCheck } from 'lucide-react';
+import { analyticsAPI, groupAPI, eventAPI } from '../lib/api';
 import { Group, Event, User } from '../types';
 import { useToast } from '../components/Toast';
 import { CreateEventModal } from '../components/CreateEventModal';
@@ -23,6 +23,7 @@ export const GroupDetail = () => {
   const [members, setMembers] = useState<User[]>([]);
   const [groupSettlements, setGroupSettlements] = useState<any[]>([]);
   const [rawGroupSettlements, setRawGroupSettlements] = useState<any[]>([]);
+  const [analytics, setAnalytics] = useState<any | null>(null);
   const [showRawBreakdown, setShowRawBreakdown] = useState(false);
 
   // Search & Invite states
@@ -43,9 +44,10 @@ export const GroupDetail = () => {
     try {
       // These three are all independent of each other -- fetch in parallel instead of
       // chaining sequentially (each round trip carries real network latency).
-      const [groupResult, pairwiseResult] = await Promise.all([
+      const [groupResult, pairwiseResult, analyticsResult] = await Promise.all([
         groupAPI.getById(groupId),
         groupAPI.getGroupPairwise(groupId).catch(() => ({ data: {} as any })),
+        analyticsAPI.group(groupId).catch(() => ({ data: null as any })),
         fetchEvents(),
       ]);
 
@@ -60,6 +62,7 @@ export const GroupDetail = () => {
       // breakdown -- what circular/indirect debts a simplified edge actually collapsed.
       setGroupSettlements(pairwiseResult.data?.pairwiseBalances || []);
       setRawGroupSettlements(pairwiseResult.data?.rawPairwiseBalances || []);
+      setAnalytics(analyticsResult.data);
     } catch (error) {
       showToast('Failed to load group', 'error');
     } finally {
@@ -298,6 +301,60 @@ export const GroupDetail = () => {
           groupName={group.name}
         />
 
+        {analytics && (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md mb-6 overflow-hidden border border-gray-100 dark:border-gray-700">
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+              <div>
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">Predictive Expense Assistant</h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Forecasts, category trends, unusual spends, and recurring suggestions.</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-6">
+              <div className="rounded-lg border border-gray-100 dark:border-gray-700 p-4">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Total spend</p>
+                <p className="text-xl font-bold text-gray-900 dark:text-white">₹{Number(analytics.totalSpend || 0).toFixed(2)}</p>
+              </div>
+              <div className="rounded-lg border border-gray-100 dark:border-gray-700 p-4">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Monthly average</p>
+                <p className="text-xl font-bold text-gray-900 dark:text-white">₹{Number(analytics.monthlyAverage || 0).toFixed(2)}</p>
+              </div>
+              <div className="rounded-lg border border-gray-100 dark:border-gray-700 p-4">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Next month forecast</p>
+                <p className="text-xl font-bold text-primary-600 dark:text-primary-400">₹{Number(analytics.forecastNextMonth || 0).toFixed(2)}</p>
+              </div>
+            </div>
+            <div className="px-6 pb-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Categories</p>
+                <div className="space-y-2">
+                  {(analytics.categorySpends || []).slice(0, 5).map((cat: any) => (
+                    <div key={cat.category} className="flex items-center justify-between text-sm bg-gray-50 dark:bg-gray-900/40 rounded-lg px-3 py-2">
+                      <span className="text-gray-700 dark:text-gray-200">{cat.category} · {cat.expenseCount} expense{cat.expenseCount === 1 ? '' : 's'}</span>
+                      <span className="font-bold text-gray-900 dark:text-white">₹{Number(cat.amount).toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Insights</p>
+                {(analytics.insights || []).length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/40 rounded-lg px-3 py-3">Not enough history for predictions yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {analytics.insights.map((insight: any, index: number) => (
+                      <div key={index} className="text-sm bg-primary-50 dark:bg-primary-950/20 text-primary-800 dark:text-primary-200 rounded-lg px-3 py-2 border border-primary-100 dark:border-primary-900/40">
+                        <p className="font-semibold">{insight.title}</p>
+                        <p className="text-xs mt-0.5">{insight.message}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Members Section */}
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-md mb-6">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Members</h2>
@@ -327,6 +384,42 @@ export const GroupDetail = () => {
             ))}
           </div>
         </div>
+
+        {analytics?.trustScores?.length > 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md mb-6 overflow-hidden border border-gray-100 dark:border-gray-700">
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              <div>
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">Trust & Reputation</h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400">On-time payment score, pending debts, confirmation waits, and reliability badges.</p>
+              </div>
+            </div>
+            <div className="divide-y divide-gray-100 dark:divide-gray-700">
+              {analytics.trustScores.map((score: any) => (
+                <div key={score.userId} className="px-6 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <p className="font-semibold text-gray-900 dark:text-white">{score.userName}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{score.badge}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <span className="px-2 py-1 rounded bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300">
+                      {Math.round(Number(score.onTimeRate) * 100)}% on-time
+                    </span>
+                    <span className="px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">
+                      {score.pendingDebts} pending
+                    </span>
+                    <span className="px-2 py-1 rounded bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300">
+                      {score.pendingConfirmations} awaiting confirmation
+                    </span>
+                    <span className="px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">
+                      {Number(score.averageSettlementDelayDays).toFixed(1)}d avg delay
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ===== Settlement Center ===== */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md mb-6 overflow-hidden border border-gray-100 dark:border-gray-700">

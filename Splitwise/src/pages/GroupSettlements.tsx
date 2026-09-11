@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
+import { DebtGraph } from '../components/DebtGraph';
 import {
   ArrowRight, ArrowLeft, Bell, CheckCircle2, Clock, TrendingDown, ChevronDown, ChevronUp, Receipt, History, GitMerge,
 } from 'lucide-react';
@@ -410,6 +411,18 @@ export const GroupSettlements = () => {
             </div>
           )}
         </div>
+
+        <DebtGraph
+          rawEdges={rawPairwise.map((edge: any) => ({ ...edge, amount: Number(edge.amount) }))}
+          optimizedEdges={pairwise.map((edge: any) => ({ ...edge, amount: Number(edge.amount) }))}
+          cycles={(optimization?.cycles || []).map((cycle: any) => ({
+            userIds: cycle.userIds,
+            cancellableAmount: Number(cycle.cancellableAmount),
+          }))}
+          settlements={(ledger?.settlements || [])
+            .filter((s: any) => !s.status || s.status === 'CONFIRMED')
+            .map((s: any) => ({ ...s, amount: Number(s.amount) }))}
+        />
 
         {/* Settlement History */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-100 dark:border-gray-700 mt-6">
