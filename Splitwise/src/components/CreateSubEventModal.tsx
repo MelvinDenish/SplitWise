@@ -37,6 +37,7 @@ export const CreateSubEventModal = ({
   const [receiptScan, setReceiptScan] = useState<any | null>(null);
   const [receiptAssignments, setReceiptAssignments] = useState<Record<number, string | number>>({});
   const [isScanningReceipt, setIsScanningReceipt] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState(0);
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -177,25 +178,55 @@ export const CreateSubEventModal = ({
     }
   };
 
-  const handleReceiptUpload = (file?: File) => {
+  const parseReceiptText = async (text: string) => {
+    if (!text.trim()) {
+      showToast('Upload a clear receipt photo or paste receipt text before scanning', 'error');
+      return;
+    }
+
+    const res = await receiptScannerAPI.scan(text, parseFloat(totalAmount) || undefined);
+    setReceiptScan(res.data);
+    if (res.data?.detectedTotal) setTotalAmount(String(res.data.detectedTotal));
+    if (!title && res.data?.items?.[0]?.label) setTitle(res.data.items[0].label);
+    showToast(res.data?.warning || 'Receipt parsed successfully', 'success');
+  };
+
+  const handleReceiptUpload = async (file?: File) => {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => setReceiptPreview(String(reader.result || ''));
     reader.readAsDataURL(file);
+
+    setIsScanningReceipt(true);
+    setOcrProgress(0);
+    try {
+      const { recognize } = await import('tesseract.js');
+      const result = await recognize(file, 'eng', {
+        logger: (message: any) => {
+          if (message.status === 'recognizing text') {
+            setOcrProgress(Math.round((message.progress || 0) * 100));
+          }
+        },
+      });
+      const extractedText = result.data.text.trim();
+      if (!extractedText) {
+        showToast('Could not read text from this receipt. Try a brighter, sharper photo.', 'error');
+        return;
+      }
+      setReceiptText(extractedText);
+      await parseReceiptText(extractedText);
+    } catch (error: any) {
+      showToast(error?.message || 'Failed to run receipt OCR', 'error');
+    } finally {
+      setIsScanningReceipt(false);
+      setOcrProgress(0);
+    }
   };
 
   const scanReceipt = async () => {
-    if (!receiptText.trim()) {
-      showToast('Paste receipt text before scanning', 'error');
-      return;
-    }
     setIsScanningReceipt(true);
     try {
-      const res = await receiptScannerAPI.scan(receiptText, parseFloat(totalAmount) || undefined);
-      setReceiptScan(res.data);
-      if (res.data?.detectedTotal) setTotalAmount(String(res.data.detectedTotal));
-      if (!title && res.data?.items?.[0]?.label) setTitle(res.data.items[0].label);
-      showToast(res.data?.warning || 'Receipt parsed successfully', 'success');
+      await parseReceiptText(receiptText);
     } catch (error: any) {
       showToast(error.response?.data?.message || 'Failed to parse receipt', 'error');
     } finally {
@@ -259,12 +290,13 @@ export const CreateSubEventModal = ({
             <div>
               <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">AI Receipt Scanner</p>
               <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
-                Upload a photo for reference, paste receipt OCR/text, then assign parsed items to members.
+                Upload a receipt photo or paste receipt text, then assign parsed items to members.
               </p>
             </div>
             <input
               type="file"
               accept="image/*"
+              disabled={isScanningReceipt}
               onChange={(e) => handleReceiptUpload(e.target.files?.[0])}
               className="block w-full text-xs text-blue-900 dark:text-blue-200"
             />
@@ -284,7 +316,9 @@ export const CreateSubEventModal = ({
               disabled={isScanningReceipt}
               className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold"
             >
-              {isScanningReceipt ? 'Scanning…' : 'Extract Items'}
+              {isScanningReceipt
+                ? ocrProgress > 0 ? `Reading receipt… ${ocrProgress}%` : 'Scanning…'
+                : 'Extract Items'}
             </button>
 
             {receiptScan?.items?.length > 0 && (
