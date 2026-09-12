@@ -51,6 +51,12 @@
             <scope>runtime</scope>
         </dependency>
 
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
         <!-- Auto-loads backend/.env into the environment so DB_URL/DB_USERNAME/DB_PASSWORD
              resolve without exporting them manually or committing secrets to application.yml -->
         <dependency>
